@@ -196,7 +196,7 @@ public class MainActivity extends Activity implements ScreenCastService.StateLis
                 .putExtra(ScreenCastService.EXTRA_PORT, pendingPort)
                 .putExtra(ScreenCastService.EXTRA_TV_NAME, pendingName)
                 .putExtra(ScreenCastService.EXTRA_MAX_SIDE, net ? 1920 : 1280)
-                .putExtra(ScreenCastService.EXTRA_BITRATE, net ? 12_000_000 : 6_000_000)
+                .putExtra(ScreenCastService.EXTRA_BITRATE, net ? 20_000_000 : 10_000_000)
                 .putExtra(ScreenCastService.EXTRA_AUDIO, audioBox.isChecked());
         startForegroundService(svc);
         pendingHost = null;

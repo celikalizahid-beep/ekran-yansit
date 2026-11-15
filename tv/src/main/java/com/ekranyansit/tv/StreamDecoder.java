@@ -50,6 +50,7 @@ final class StreamDecoder {
     private byte[] csd;
 
     private final AtomicInteger framesRendered = new AtomicInteger();
+    private final AtomicInteger framesReceived = new AtomicInteger();
     private final AtomicLong bytesReceived = new AtomicLong();
 
     StreamDecoder(Callbacks callbacks) {
@@ -88,6 +89,7 @@ final class StreamDecoder {
     /** Ağ iş parçacığından: bir sıkıştırılmış kare. */
     void onFrame(byte[] data, int len, long ptsUs, boolean keyframe) {
         bytesReceived.addAndGet(len + 13);
+        framesReceived.incrementAndGet();
         if (broken) recover();
 
         int gen;
@@ -167,6 +169,10 @@ final class StreamDecoder {
 
     int takeRenderedFrames() {
         return framesRendered.getAndSet(0);
+    }
+
+    int takeReceivedFrames() {
+        return framesReceived.getAndSet(0);
     }
 
     long takeReceivedBytes() {

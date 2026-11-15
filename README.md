@@ -36,7 +36,24 @@ Hazır APK'lar bu deponun **Releases** (Sürümler) sayfasındadır:
 3. İlk seferde ses izni istenir (aşağıya bakın), ardından "Ekranınızı paylaşın" iznini onaylayın.
 4. Durdurmak için uygulamadaki *Yansıtmayı durdur* düğmesine ya da bildirimdeki *Durdur*a basın.
 
-TV kumandasında **OK** tuşu sağ üstteki istatistikleri (fps, Mbps, çözünürlük, ses durumu) açıp kapatır.
+TV kumandasında **OK** tuşu sağ üstteki istatistikleri açıp kapatır.
+
+### İstatistikleri okumak (fps neden düşük?)
+
+```
+Telefon 28 · Alınan 28 · Gösterilen 28 fps
+6.3 Mbps · ağ beklemesi 0 ms/sn · 1280×576 · ses açık
+▶ Kaynak sınırı: telefondaki uygulama bu hızda çiziyor
+```
+
+- **Telefon:** Telefonun saniyede kodladığı kare sayısı. **Alınan:** TV'ye ulaşan kare sayısı. **Gösterilen:** Ekrana basılan kare sayısı.
+- **Ağ beklemesi:** Telefonun Wi-Fi'ye yazarken saniyede kaç ms beklediği. 0'a yakın olması iyidir.
+- Son satır, yavaşlığın nereden kaynaklandığını söyler:
+  - **Kaynak sınırı:** Telefon ekranı zaten bu hızda değişiyor. Videolar genelde 24–30 fps'tir, birçok oyun da
+    30 fps'e kilitlidir. Bu durumda TV'de 30 fps görmek normaldir ve aktarım tarafından iyileştirilemez.
+    Oyunun ayarlarında "60 FPS / Yüksek kare hızı" seçeneği varsa açın.
+  - **Wi-Fi yetişmiyor:** 5 GHz ağa geçin, modeme yaklaşın ya da **Hızlı (720p)** moda geçin.
+  - **TV çözücüsü:** TV görüntüyü çözmekte zorlanıyor. **Hızlı (720p)** mod yardımcı olur.
 
 ## Ses aktarımı
 
@@ -67,6 +84,9 @@ Bluetooth canlı ekran görüntüsü için çok yavaştır: pratikte yaklaşık 
 
 - Yakalama: `MediaProjection` → `VirtualDisplay` → donanım kodlayıcının giriş yüzeyi (bellek kopyası yok).
 - Kodlama: H.264, 60 fps, B-kare yok, `latency=1`, gerçek zamanlı öncelik. Ekran değişmese bile 100 ms'de bir kare üretilir.
+  Bit hızı 720p'de 10 Mbps, 1080p'de 20 Mbps. Kodlayıcı açıkça VBR moduna alınır, çünkü bazı çiplerde varsayılan
+  CBR modu zor sahnelerde kare atlar. Ayrıca `operating-rate=120` ile kodlayıcının saat hızı yüksek tutulur;
+  bunu kabul etmeyen kodlayıcıda sade ayarlara geri dönülür.
 - Taşıma: TCP + `TCP_NODELAY`, küçük gönderme tamponu ve Wi-Fi düşük gecikme kilidi (`WIFI_MODE_FULL_LOW_LATENCY`).
   Ağ yavaşlarsa kareler birikmez, eskileri atılır.
 - Çözme: asenkron `MediaCodec` ve `KEY_LOW_LATENCY`. Kareler zaman damgası beklenmeden anında ekrana basılır.
@@ -79,6 +99,8 @@ Bluetooth canlı ekran görüntüsü için çok yavaştır: pratikte yaklaşık 
 
 ## Sürümler
 
+- **1.2:** Hareketli sahnelerde kare düşüşüne karşı yüksek bit hızı, VBR ve kodlayıcı hızlandırma eklendi.
+  TV istatistiklerine darboğaz teşhisi eklendi.
 - **1.1:** Ses aktarımı eklendi.
 - **1.0:** İlk sürüm (yalnızca görüntü).
 

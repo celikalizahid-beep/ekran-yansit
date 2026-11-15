@@ -25,6 +25,9 @@ final class StreamServer {
         void onClientConnected(String address);
 
         void onClientDisconnected();
+
+        /** Telefonun saniyelik teşhisi: kodlanan kare sayısı ve ağa yazarken bekleme süresi. */
+        void onPhoneStats(int encodedFps, int networkWaitMs);
     }
 
     private static final String TAG = "EkranYansitTV";
@@ -136,6 +139,10 @@ final class StreamServer {
                     decoder.onFrame(buf, len, pts, type == Protocol.TYPE_KEYFRAME);
                 } else if (type == Protocol.TYPE_AUDIO) {
                     audio.write(buf, len);
+                } else if (type == Protocol.TYPE_STATS) {
+                    if (len < 8) continue;
+                    ByteBuffer bb = ByteBuffer.wrap(buf, 0, len);
+                    listener.onPhoneStats(bb.getInt(), bb.getInt());
                 } else if (type == Protocol.TYPE_AUDIO_CONFIG) {
                     if (len < 8) continue;
                     ByteBuffer bb = ByteBuffer.wrap(buf, 0, len);

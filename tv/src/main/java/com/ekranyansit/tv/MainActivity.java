@@ -45,6 +45,8 @@ public class MainActivity extends Activity
     private WifiManager.WifiLock wifiLock;
 
     private int videoW, videoH;
+    private volatile int phoneFps = -1;
+    private volatile int phoneWaitMs;
     private boolean statsVisible = true;
     private boolean connected;
     private String tvName;
@@ -52,12 +54,19 @@ public class MainActivity extends Activity
     private final Runnable statsTick = new Runnable() {
         @Override
         public void run() {
-            int frames = decoder.takeRenderedFrames();
+            int shown = decoder.takeRenderedFrames();
+            int received = decoder.takeReceivedFrames();
             long bytes = decoder.takeReceivedBytes();
             if (connected && videoW > 0) {
-                statsText.setText(String.format(Locale.US, "%d fps · %.1f Mbps · %d×%d · %s",
-                        frames, bytes * 8 / 1_000_000.0, videoW, videoH,
-                        audio.isActive() ? "ses açık" : "ses yok"));
+                int enc = phoneFps;
+                int wait = phoneWaitMs;
+                statsText.setText(String.format(Locale.US,
+                        "Telefon %s · Alınan %d · Gösterilen %d fps\n"
+                                + "%.1f Mbps · ağ beklemesi %d ms/sn · %d×%d · %s\n%s",
+                        enc < 0 ? "?" : String.valueOf(enc), received, shown,
+                        bytes * 8 / 1_000_000.0, wait, videoW, videoH,
+                        audio.isActive() ? "ses açık" : "ses yok",
+                        diagnose(enc, wait, received, shown)));
             }
             ui.postDelayed(this, 1000);
         }
@@ -181,6 +190,7 @@ public class MainActivity extends Activity
     public void onClientDisconnected() {
         ui.post(() -> {
             connected = false;
+            phoneFps = -1;
             videoW = videoH = 0;
             showIdle("Bağlantı kapandı. Yeniden bağlanmayı bekliyor…");
         });
@@ -195,6 +205,20 @@ public class MainActivity extends Activity
             idlePanel.setVisibility(View.GONE);
             statsText.setVisibility(statsVisible ? View.VISIBLE : View.GONE);
         });
+    }
+
+    @Override
+    public void onPhoneStats(int encodedFps, int networkWaitMs) {
+        phoneFps = encodedFps;
+        phoneWaitMs = networkWaitMs;
+    }
+
+    /** Kare hızının nerede düştüğünü tek satırda söyler. */
+    private static String diagnose(int enc, int waitMs, int received, int shown) {
+        if (waitMs > 300) return "▶ Darboğaz: Wi-Fi yetişmiyor (5 GHz / Hızlı mod deneyin)";
+        if (received - shown >= 5 && shown < received * 0.85) return "▶ Darboğaz: TV çözücüsü";
+        if (enc >= 0 && enc < 40) return "▶ Kaynak sınırı: telefondaki uygulama bu hızda çiziyor";
+        return "▶ Akış sorunsuz";
     }
 
     @Override

@@ -21,6 +21,8 @@ final class Protocol {
     static final byte TYPE_AUDIO_CONFIG = 4;
     /** Ham PCM 16 bit little-endian, ~10 ms */
     static final byte TYPE_AUDIO = 5;
+    /** Telefon teşhisi, saniyede bir: int kodlanan fps | int ağa yazarken bekleme (ms) */
+    static final byte TYPE_STATS = 6;
 
     static final int CMD_REQUEST_KEYFRAME = 1;
 

@@ -284,8 +284,23 @@ public class ScreenCastService extends Service {
     private void drain(MediaCodec codec, DataOutputStream out, int w, int h) throws IOException {
         MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
         byte[] buf = new byte[256 * 1024];
+        // Teşhis: saniyede kaç kare kodlandı, ağa yazarken ne kadar beklendi.
+        long statsStart = System.nanoTime();
+        int statsFrames = 0;
+        long statsWaitNs = 0;
 
         while (!stopRequested && !restartRequested) {
+            long now = System.nanoTime();
+            if (now - statsStart >= 1_000_000_000L) {
+                int fps = (int) Math.round(statsFrames * 1e9 / (now - statsStart));
+                int waitMs = (int) (statsWaitNs / 1_000_000L);
+                byte[] st = ByteBuffer.allocate(8).putInt(fps).putInt(waitMs).array();
+                writePacket(out, Protocol.TYPE_STATS, 0, st, st.length);
+                statsStart = now;
+                statsFrames = 0;
+                statsWaitNs = 0;
+            }
+
             if (keyframeRequested) {
                 keyframeRequested = false;
                 if (lastConfig != null) writePacket(out, Protocol.TYPE_CONFIG, 0, lastConfig, lastConfig.length);
@@ -327,7 +342,10 @@ public class ScreenCastService extends Service {
                     sendConfig(out, w, h, Arrays.copyOf(buf, size));
                 } else {
                     boolean key = (flags & MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0;
+                    long t0 = System.nanoTime();
                     writePacket(out, key ? Protocol.TYPE_KEYFRAME : Protocol.TYPE_FRAME, pts, buf, size);
+                    statsWaitNs += System.nanoTime() - t0;
+                    statsFrames++;
                 }
             }
             if ((flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) break;
@@ -461,31 +479,48 @@ public class ScreenCastService extends Service {
             double scale = Math.min(1.0, side / (double) Math.max(sw, sh));
             int w = align16(sw * scale);
             int h = align16(sh * scale);
-            MediaCodec codec = MediaCodec.createEncoderByType(MIME);
-            try {
-                MediaCodecInfo.VideoCapabilities caps =
-                        codec.getCodecInfo().getCapabilitiesForType(MIME).getVideoCapabilities();
-                if (caps != null && !caps.isSizeSupported(w, h)) {
+            // Önce "tam hız" ayarlarıyla dene; kabul etmeyen kodlayıcıda sade ayarlara düş.
+            for (boolean boost : new boolean[]{true, false}) {
+                MediaCodec codec = MediaCodec.createEncoderByType(MIME);
+                try {
+                    MediaCodecInfo.CodecCapabilities cc = codec.getCodecInfo().getCapabilitiesForType(MIME);
+                    MediaCodecInfo.VideoCapabilities caps = cc.getVideoCapabilities();
+                    if (caps != null && !caps.isSizeSupported(w, h)) {
+                        codec.release();
+                        break; // bu boyut olmaz, daha küçüğünü dene
+                    }
+                    MediaCodecInfo.EncoderCapabilities enc = cc.getEncoderCapabilities();
+                    boolean vbr = enc != null && enc.isBitrateModeSupported(
+                            MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR);
+                    codec.configure(buildFormat(w, h, bitrate, boost, vbr), null, null,
+                            MediaCodec.CONFIGURE_FLAG_ENCODE);
+                    outSize[0] = w;
+                    outSize[1] = h;
+                    Log.i(TAG, "kodlayıcı " + codec.getName() + " tamHız=" + boost + " vbr=" + vbr);
+                    return codec;
+                } catch (RuntimeException e) {
+                    Log.w(TAG, "kodlayıcı " + w + "x" + h + " tamHız=" + boost + " olmadı", e);
+                    last = e;
                     codec.release();
-                    continue;
                 }
-                codec.configure(buildFormat(w, h, bitrate), null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
-                outSize[0] = w;
-                outSize[1] = h;
-                return codec;
-            } catch (RuntimeException e) {
-                Log.w(TAG, "kodlayıcı " + w + "x" + h + " olmadı", e);
-                last = e;
-                codec.release();
             }
         }
         throw new IOException("Telefonun video kodlayıcısı uygun bir boyut kabul etmedi", last);
     }
 
-    private static MediaFormat buildFormat(int w, int h, int bitrate) {
+    private static MediaFormat buildFormat(int w, int h, int bitrate, boolean boost, boolean vbr) {
         MediaFormat f = MediaFormat.createVideoFormat(MIME, w, h);
         f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         f.setInteger(MediaFormat.KEY_BIT_RATE, bitrate);
+        if (vbr) {
+            // Bazı çiplerde (ör. Qualcomm) CBR "değişken kare hızı" demektir: zor sahnede kare ATLAR.
+            // VBR sabit kare hızında kalır.
+            f.setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR);
+        }
+        if (boost) {
+            // Kodlayıcı saatini yüksek tut: oyun GPU'yu zorlarken kodlama yavaşlamasın.
+            f.setInteger(MediaFormat.KEY_OPERATING_RATE, 120);
+        }
         f.setInteger(MediaFormat.KEY_FRAME_RATE, 60);
         // Kayıpsız TCP kullandığımız için sık anahtar kareye gerek yok; TV isterse anında üretilir.
         f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 5);
