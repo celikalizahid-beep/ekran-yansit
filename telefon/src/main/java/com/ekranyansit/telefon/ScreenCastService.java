@@ -112,6 +112,15 @@ public class ScreenCastService extends Service {
     private DisplayManager.DisplayListener displayListener;
     private boolean audioEnabled;
 
+    // Uyarlanabilir kalite (yalnızca görüntü iş parçacığı kullanır)
+    private static final int MIN_BITRATE = 2_000_000;
+    private static final int MIN_SIDE = 960;
+    private int maxBitrate;
+    private int curBitrate;
+    private int curMaxSide;
+    private int goodSeconds;
+    private int congestedSeconds;
+
     @Override
     public IBinder onBind(Intent intent) {
         return null;
@@ -209,9 +218,12 @@ public class ScreenCastService extends Service {
             if (audioEnabled) startAudio(out);
             notifyState(true, "Yansıtılıyor → " + tvName + (audioEnabled ? " (sesli)" : " (sessiz)"));
 
+            maxBitrate = bitrate;
+            curBitrate = bitrate;
+            curMaxSide = maxSide;
             while (!stopRequested) {
                 restartRequested = false;
-                encodeSession(out, maxSide, bitrate);
+                encodeSession(out, curMaxSide, curBitrate);
             }
         } catch (IOException e) {
             if (!stopRequested) {
@@ -294,7 +306,8 @@ public class ScreenCastService extends Service {
             if (now - statsStart >= 1_000_000_000L) {
                 int fps = (int) Math.round(statsFrames * 1e9 / (now - statsStart));
                 int waitMs = (int) (statsWaitNs / 1_000_000L);
-                byte[] st = ByteBuffer.allocate(8).putInt(fps).putInt(waitMs).array();
+                adaptQuality(codec, waitMs);
+                byte[] st = ByteBuffer.allocate(12).putInt(fps).putInt(waitMs).putInt(curBitrate / 1000).array();
                 writePacket(out, Protocol.TYPE_STATS, 0, st, st.length);
                 statsStart = now;
                 statsFrames = 0;
@@ -349,6 +362,47 @@ public class ScreenCastService extends Service {
                 }
             }
             if ((flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) break;
+        }
+    }
+
+    /**
+     * Ağ yetişmezse (saniyede >150 ms yazma beklemesi) bit hızını hızla düşür, ağ rahatsa yavaşça
+     * geri yükselt. En düşük bit hızında da yetişmiyorsa çözünürlüğü bir kademe düşür.
+     * Böylece zayıf Wi-Fi'de kalite biraz düşer ama kare hızı ve gecikme korunur.
+     */
+    private void adaptQuality(MediaCodec codec, int waitMs) {
+        int old = curBitrate;
+        if (waitMs > 150) {
+            goodSeconds = 0;
+            curBitrate = Math.max(MIN_BITRATE, (int) (curBitrate * 0.7));
+            if (old == MIN_BITRATE && waitMs > 300) {
+                if (++congestedSeconds >= 3 && curMaxSide > MIN_SIDE) {
+                    congestedSeconds = 0;
+                    curMaxSide = curMaxSide > 1280 ? 1280 : MIN_SIDE;
+                    Log.i(TAG, "ağ yetişmiyor: çözünürlük düşürülüyor → " + curMaxSide);
+                    restartRequested = true; // yeni boyutla kodlayıcı yeniden başlar
+                }
+            } else {
+                congestedSeconds = 0;
+            }
+        } else {
+            congestedSeconds = 0;
+            if (waitMs < 40) {
+                if (++goodSeconds >= 3) {
+                    goodSeconds = 0;
+                    curBitrate = Math.min(maxBitrate, (int) (curBitrate * 1.15));
+                }
+            } else {
+                goodSeconds = 0;
+            }
+        }
+        if (curBitrate != old) {
+            Bundle b = new Bundle();
+            b.putInt(MediaCodec.PARAMETER_KEY_VIDEO_BITRATE, curBitrate);
+            try {
+                codec.setParameters(b);
+            } catch (IllegalStateException ignored) {
+            }
         }
     }
 

@@ -47,6 +47,7 @@ public class MainActivity extends Activity
     private int videoW, videoH;
     private volatile int phoneFps = -1;
     private volatile int phoneWaitMs;
+    private volatile int phoneKbps = -1;
     private boolean statsVisible = true;
     private boolean connected;
     private String tvName;
@@ -62,9 +63,11 @@ public class MainActivity extends Activity
                 int wait = phoneWaitMs;
                 statsText.setText(String.format(Locale.US,
                         "Telefon %s · Alınan %d · Gösterilen %d fps\n"
-                                + "%.1f Mbps · ağ beklemesi %d ms/sn · %d×%d · %s\n%s",
+                                + "%.1f Mbps (hedef %s) · ağ beklemesi %d ms/sn · %d×%d · %s\n%s",
                         enc < 0 ? "?" : String.valueOf(enc), received, shown,
-                        bytes * 8 / 1_000_000.0, wait, videoW, videoH,
+                        bytes * 8 / 1_000_000.0,
+                        phoneKbps < 0 ? "?" : String.format(Locale.US, "%.1f", phoneKbps / 1000.0),
+                        wait, videoW, videoH,
                         audio.isActive() ? "ses açık" : "ses yok",
                         diagnose(enc, wait, received, shown)));
             }
@@ -208,14 +211,15 @@ public class MainActivity extends Activity
     }
 
     @Override
-    public void onPhoneStats(int encodedFps, int networkWaitMs) {
+    public void onPhoneStats(int encodedFps, int networkWaitMs, int bitrateKbps) {
         phoneFps = encodedFps;
         phoneWaitMs = networkWaitMs;
+        phoneKbps = bitrateKbps;
     }
 
     /** Kare hızının nerede düştüğünü tek satırda söyler. */
     private static String diagnose(int enc, int waitMs, int received, int shown) {
-        if (waitMs > 300) return "▶ Darboğaz: Wi-Fi yetişmiyor (5 GHz / Hızlı mod deneyin)";
+        if (waitMs > 300) return "▶ Darboğaz: Wi-Fi yetişmiyor — kalite otomatik düşürülüyor";
         if (received - shown >= 5 && shown < received * 0.85) return "▶ Darboğaz: TV çözücüsü";
         if (enc >= 0 && enc < 40) return "▶ Kaynak sınırı: telefondaki uygulama bu hızda çiziyor";
         return "▶ Akış sorunsuz";

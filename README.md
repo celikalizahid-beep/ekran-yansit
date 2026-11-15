@@ -52,7 +52,11 @@ Telefon 28 · Alınan 28 · Gösterilen 28 fps
   - **Kaynak sınırı:** Telefon ekranı zaten bu hızda değişiyor. Videolar genelde 24–30 fps'tir, birçok oyun da
     30 fps'e kilitlidir. Bu durumda TV'de 30 fps görmek normaldir ve aktarım tarafından iyileştirilemez.
     Oyunun ayarlarında "60 FPS / Yüksek kare hızı" seçeneği varsa açın.
-  - **Wi-Fi yetişmiyor:** 5 GHz ağa geçin, modeme yaklaşın ya da **Hızlı (720p)** moda geçin.
+  - **Wi-Fi yetişmiyor:** Uygulama bit hızını kendiliğinden düşürür (istatistikteki "hedef" değeri),
+    gerekirse çözünürlüğü de düşürür. Bu durum sık oluyorsa:
+    1. TV'yi **Ethernet kablosuyla** modeme bağlayın. En etkili çözüm budur.
+    2. TV 2,4 GHz'e bağlıysa ve 5 GHz sinyali TV'ye zayıf ulaşıyorsa modemi TV'ye yaklaştırın.
+    3. Ses gerekmiyorsa "Sesi de aktar" kutusunu kaldırın; bu yaklaşık 1,5 Mbps kazandırır.
   - **TV çözücüsü:** TV görüntüyü çözmekte zorlanıyor. **Hızlı (720p)** mod yardımcı olur.
 
 ## Ses aktarımı
@@ -89,6 +93,10 @@ Bluetooth canlı ekran görüntüsü için çok yavaştır: pratikte yaklaşık 
   bunu kabul etmeyen kodlayıcıda sade ayarlara geri dönülür.
 - Taşıma: TCP + `TCP_NODELAY`, küçük gönderme tamponu ve Wi-Fi düşük gecikme kilidi (`WIFI_MODE_FULL_LOW_LATENCY`).
   Ağ yavaşlarsa kareler birikmez, eskileri atılır.
+- Uyarlanabilir kalite: Telefon her saniye ağa yazarken ne kadar beklediğini ölçer. Bekleme saniyede 150 ms'yi aşarsa
+  bit hızı %30 düşürülür (en az 2 Mbps). Bekleme 3 saniye boyunca 40 ms'nin altında kalırsa bit hızı %15 artırılır
+  (en fazla seçilen kalitenin değeri). En düşük bit hızında da yetişemezse çözünürlük önce 1280'e, sonra 960
+  piksele indirilir.
 - Çözme: asenkron `MediaCodec` ve `KEY_LOW_LATENCY`. Kareler zaman damgası beklenmeden anında ekrana basılır.
 - Bulma: mDNS / NSD (`_ekranyansit._tcp`), port 47800.
 - Telefon döndürülünce kodlayıcı yeni boyutla yeniden başlar. TV görüntüyü en-boy oranını koruyarak sığdırır.
@@ -99,6 +107,7 @@ Bluetooth canlı ekran görüntüsü için çok yavaştır: pratikte yaklaşık 
 
 ## Sürümler
 
+- **1.3:** Ağa göre otomatik bit hızı ve çözünürlük ayarı eklendi. Zayıf Wi-Fi'de kare hızı korunuyor.
 - **1.2:** Hareketli sahnelerde kare düşüşüne karşı yüksek bit hızı, VBR ve kodlayıcı hızlandırma eklendi.
   TV istatistiklerine darboğaz teşhisi eklendi.
 - **1.1:** Ses aktarımı eklendi.
